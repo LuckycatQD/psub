@@ -2993,7 +2993,7 @@ var src_default = {
         } else {
           parsedObj = parseData(url2);
         }
-        if (/^(ssr?|vmess1?|trojan|vless|hysteria):\/\//.test(url2)) {
+        if (/^(ssr?|vmess1?|trojan|vless|hysteria|hysteria2|hy2):\/\//.test(url2)) {
           const newLink = replaceInUri(url2, replacements, false);
           if (newLink)
             replacedURIs.push(newLink);
@@ -3067,6 +3067,10 @@ function replaceInUri(link, replacements, isRecovery) {
       return replaceTrojan(link, replacements, isRecovery);
     case link.startsWith("hysteria://"):
       return replaceHysteria(link, replacements);
+    // 新增 Hysteria2 协议分支
+    case link.startsWith("hysteria2://"):
+    case link.startsWith("hy2://"):
+      return replaceHysteria2(link, replacements, isRecovery);
     default:
       return;
   }
@@ -3220,6 +3224,44 @@ function replaceHysteria(link, replacements) {
   const randomDomain = generateRandomStr(12) + ".com";
   replacements[randomDomain] = server;
   return link.replace(server, randomDomain);
+}
+function replaceHysteria2(link, replacements, isRecovery) {
+  // 解析 Hysteria2 链接格式: hy2://[auth@]host:port?[params]
+  const regexMatch = link.match(/hysteria2:\/\/|hy2:\/\/(.*?@)?([^:]+):(\d+)\?(.*)/);
+  if (!regexMatch) return;
+
+  const [_, authPart, originalServer, originalPort, params] = regexMatch;
+  const randomDomain = generateRandomStr(12) + ".net";
+  const randomAuth = generateRandomStr(16);
+  const randomPort = Math.floor(Math.random() * 2000) + 10000;
+
+  // 参数处理 (obfs, sni, insecure 等)
+  const searchParams = new URLSearchParams(params);
+  const obfsType = searchParams.get('obfs');
+  const obfsPassword = searchParams.get('password') || generateRandomStr(8);
+
+  // 替换逻辑
+  if (isRecovery) {
+    // 还原原始数据
+    return `hy2://${replacements[randomAuth]}@${replacements[randomDomain]}:${replacements[randomPort]}?${params}`
+      .replace(/obfs=[^&]+/, `obfs=${replacements[obfsType]}`)
+      .replace(/password=[^&]+/, `password=${replacements[obfsPassword]}`);
+  } else {
+    // 生成混淆数据
+    replacements[randomDomain] = originalServer;
+    replacements[randomAuth] = authPart ? authPart.slice(0, -1) : ''; // 移除 @ 符号
+    replacements[randomPort] = originalPort;
+    replacements[obfsType] = searchParams.get('obfs') || '';
+    replacements[obfsPassword] = obfsPassword;
+
+    // 构建新链接
+    return `hy2://${randomAuth}@${randomDomain}:${randomPort}?` +
+      `obfs=${obfsType}&password=${obfsPassword}&` +
+      Array.from(searchParams.entries())
+        .filter(([k]) => !['obfs', 'password'].includes(k))
+        .map(([k, v]) => `${k}=${v}`)
+        .join('&');
+  }
 }
 function replaceYAML(yamlObj, replacements) {
   if (!yamlObj.proxies) {
